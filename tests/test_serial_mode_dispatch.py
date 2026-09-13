@@ -30,13 +30,10 @@ class SerialModeDispatchTest(unittest.TestCase):
                 )
                 self.assertRegex(block, r"\bintMode\s*=\s*intSerialCmdMode\s*;")
                 self.assertRegex(block, r"\bblnInitialized\s*=\s*false\s*;")
-                self.assertRegex(
+                self.assertNotRegex(
                     block,
-                    r"intMode\s*=\s*intSerialCmdMode\s*;\s*"
-                    r"blnInitialized\s*=\s*false\s*;\s*"
-                    r"if\s*\(intSerialCmdMode\s*<\s*5\)[\s\S]*"
-                    r"ParseSetParameter\(strParameter,\s*intSerialCmdMode\)",
-                    "all commands must update live state before the legacy channel-mode display refresh",
+                    r"if\s*\(intSerialCmdMode\s*<\s*5\)",
+                    "parameter-page commands must update the selected live state too",
                 )
 
 

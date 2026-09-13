@@ -26,20 +26,7 @@ class SerialStateApplicationTest(unittest.TestCase):
         for firmware in FIRMWARES:
             with self.subTest(firmware=str(firmware.relative_to(ROOT))):
                 source = firmware.read_text(encoding="utf-8")
-                self.assertIn("boolean ParseSetParameter(", source)
-
-                display_setter = function(
-                    source,
-                    "boolean ParseSetParameter(",
-                    "void SetFilterBandwidth(",
-                )
-                fm_rate = function(
-                    display_setter,
-                    "if (intMode == 10)",
-                    "if ((intMode >= 11)",
-                )
-                self.assertIn("String(10 * fltLogs[j])", fm_rate)
-                self.assertNotIn("String(100 * fltLogs[j])", fm_rate)
+                self.assertNotIn("boolean ParseSetParameter(", source)
 
                 sim_setter = function(
                     source,

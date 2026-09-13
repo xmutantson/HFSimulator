@@ -301,6 +301,7 @@ boolean blnDisplayLvl = true;
 
 // Unsigned long
 unsigned long ulngLastSpectrumUpdateMs = millis(); unsigned long ulngLastLevelDisplayMs = millis();
+unsigned long ulngLastTFTWatchdogMs = 0; unsigned long ulngLastTFTRefreshMs = 0;
 unsigned long ulngLastDelayUpdateUs; unsigned long ulngCurrentElapsedTimeUs ; unsigned long ulngLastPPAvgTimeUs; unsigned long ulngLastSNUpdateUs;
 
 // Long
@@ -340,6 +341,10 @@ static float fltCalTestLevel = .11416 ;// Value for calibration to set max Peak 
 static float fltNomInOutRatio = .41055;// Average calibration value for ratio Input to Output
 static float fltMinimumIDelayMs = 1.3378684807; //59 taps. Compensates for 59 tap delay for 119 tap Hilbert filter on  Q paths  
 static float fltNomCalLevel = 1800.0;
+
+// Last state rendered by the one-way DSP-to-display mirror.
+boolean blnTFTStateValid = false; boolean blnTFTStateSim = true; boolean blnTFTMirrorDrawing = false;
+int intTFTStateMode = -1; long lngTFTStateValue = 0;
 
 //Filters
 /*
@@ -870,118 +875,6 @@ void PlotSpectrum(float fltFFTBins[], int intLowHz, int intHighHz, boolean blnIn
     } 
  }// End PlotSpectrum *****************************************************************************************
 
-//*******Function to Parse and Set Parameter received via Serial Port **********************
-boolean ParseSetParameter(String strParameter, int intMode)
-// Determins if strParameter is compatible with intMode. if not returns false
-// If compatible sets the parameter and Mode, Updates display showing mode and parameter and returns true
-{
-  int intParam = strParameter.toInt(); String str1; String str2; String str3; float fltParam = strParameter.toFloat();
-  if (intMode < 5)  //WGN thru MPD
-  {
-    intParam = strParameter.toInt();
-    if ((-40 <= intParam) && (intParam <= 40))
-    {
-      //Serial.print(" ENC1 intTargetSN= ");Serial.println(intTargetSN);;
-      intTargetSN = intParam;
-      str1 = chrModes[intMode];  str2 = "    S:N= " + String(intTargetSN); str3 = " dB";
-      UpdateTFTModeParameter(str1, str2, str3);
-      return true;
-    }
-  }
-  if (intMode == 5) //MULTIPATHS
-  {
-    if ((intParam == 2) || (intParam == 4)) 
-      {
-        intMultipaths = intParam; return true;
-      }
-  
-   
-  }
-  if (intMode == 6) //FADE DEPTH
-  {
-    if ((intParam >= 0) && (intParam <= 40))
-    {
-      intFadeDepth_dB = intParam;
-      str1 = chrModes[intMode]; str2 = "      " + String(intParam) ; str3 =  " dB";
-      UpdateTFTModeParameter(str1, str2, str3);
-      return true;
-    }
-  }
-  if (intMode == 7) //FADE FREQ  fltFadeRates
-  {
-    for (int j = 0; j < 9; j += 1)
-      if  ((abs(fltLogs[j] - fltParam)) < .01)
-      {
-        intFMDevPtr = j;
-        str1 = chrModes[intMode]; str2 = "      " + String(10 * fltLogs[j]) ; str3 =  " Hz";
-        UpdateTFTModeParameter(str1, str2, ""); 
-        return true;
-      }
-  }
-  if (intMode == 8) //OFFSET
-    {
-      if ((intParam >= -200) && (intParam <= 200))
-        {
-          intTuneOffset = intParam;
-          str1 = chrModes[intMode]; str2 = "      " + String(intParam) ; str3 =  " Hz";
-          UpdateTFTModeParameter(str1, str2, str3);
-          return true;
-        }
-    }
-  if (intMode == 9) // FM DEVIATION  
-    {
-      for (int j = 0; j < 9; j ++)
-        if  ((abs(fltLogs[j] - fltParam)) < .001)
-          {
-            intFMDevPtr = j;
-            str1 = chrModes[intMode]; str2 = "      " + String(100 * fltLogs[j]) ; str3 =  " Hz";
-            UpdateTFTModeParameter(str1, str2, "");
-            return true;
-          }
-    }
-  if (intMode == 10)  //FM RATE 
-  {
-
-    for (int j = 0; j < 9; j += 1)
-      if ((abs(fltLogs[j] - fltParam)) < .001)
-      {
-        intFMRatePtr = j;
-        str1 = chrModes[intMode]; str2 = "      " + String(10 * fltLogs[j]) ; str3 =  " Hz";
-        UpdateTFTModeParameter(str1, str2, "");
-        return true;
-      }
-  }
-  if ((intMode >= 11) && (intMode <= 14)) //IN and OUT levels
-  {
-    intParam = strParameter.toInt();
-    if ((intParam >= 0) && (intParam <= 20))
-    {
-      intGainLevel[intMode - 11] = intParam;//Serial.print("Line 795: intParam= ");Serial.println(intParam);
-      str1 = chrModes[intMode]; str2 = "      " + String(intParam) ; str3 =  "";
-      UpdateTFTModeParameter(str1, str2, str3);
-      return true;
-    }
-  }
-  if (intMode == 15)  //Bandwidth
-  {
-    intParam = strParameter.toInt();
-    if ((intParam == 3000) || (intParam == 6000))
-    {
-      intBandwidth = intParam;
-      str1 = chrModes[intMode]; str2 = "      " + String(intBandwidth) ; str3 =  " Hz";
-      UpdateTFTModeParameter(str1, str2, str3);
-      return true;
-    }
-    else {
-      return false;
-    }
-  }
-  else {
-    return false;
-  }
-
-}// End ParseSetParameter **************************************************************
-
 // Subroutine for Setting Filter Bandwith**********************************************************
 void SetFilterBandwidth(int intBW)
 {
@@ -1424,6 +1317,218 @@ void UpdateTFTModeParameter(String s1, String s2, String s3)
   tft.setTextColor(ST7735_GREEN);  tft.setTextSize(3);  tft.println(s2 + s3);
 }// End UpdateTFTModeParameter *******************************************************************
 
+String StateModeToken(char *chrMode)
+{
+  String strToken = chrMode;
+  strToken.trim();
+  if (strToken.endsWith(":")) {strToken.remove(strToken.length() - 1);}
+  return strToken;
+}
+
+String SimulatorStateParameterText(int intStateMode)
+{
+  if ((intStateMode >= 0) && (intStateMode <= 4)) {return String(intTargetSN);}
+  if (intStateMode == 5) {return String(intMultipaths);}
+  if (intStateMode == 6) {return String(intFadeDepth_dB);}
+  if (intStateMode == 7) {return String(10 * fltLogs[intFadeRatePtr], 2);}
+  if (intStateMode == 8) {return String(intTuneOffset);}
+  if (intStateMode == 9) {return String(100 * fltLogs[intFMDevPtr], 2);}
+  if (intStateMode == 10) {return String(10 * fltLogs[intFMRatePtr], 2);}
+  if ((intStateMode == 11) || (intStateMode == 12)) {return String(100 * fltLogs[intGainLevel[intStateMode - 11]], 2);}
+  if ((intStateMode == 13) || (intStateMode == 14)) {return String(fltLogs[intGainLevel[intStateMode - 11]], 2);}
+  if (intStateMode == 15) {return String(intBandwidth);}
+  if (intStateMode == 16) {return String(intBaudRate[intBaudPtr]);}
+  if ((intStateMode == 17) || (intStateMode == 18)) {return String(intTestFreqHz);}
+  return "";
+}
+
+String BusyStateParameterText(int intStateMode)
+{
+  if (intStateMode == 0) {return String(intAvg);}
+  if (intStateMode == 1) {return "0";}
+  if (intStateMode == 2) {return String(intBusyBWLoHz);}
+  if (intStateMode == 3) {return String(intBusyBWHiHz);}
+  if (intStateMode == 4) {return String(intThresh);}
+  if (intStateMode == 5) {return String(intTestFreqHz);}
+  if (intStateMode == 6) {return "0";}
+  if (intStateMode == 7) {return String(intGainLevel[0]);}
+  if (intStateMode == 8) {return String(intBandwidth);}
+  if (intStateMode == 9) {return String(blnPlotSpectrum ? 1 : 0);}
+  return "";
+}
+
+boolean FeatureParameterIsNumeric(String strValue)
+{
+  strValue.trim();
+  if (strValue.length() == 0) {return false;}
+  boolean blnDigitSeen = false; boolean blnDecimalSeen = false;
+  for (unsigned int i = 0; i < strValue.length(); i++)
+    {
+      char chrValue = strValue.charAt(i);
+      if ((chrValue >= '0') && (chrValue <= '9')) {blnDigitSeen = true; continue;}
+      if (((chrValue == '+') || (chrValue == '-')) && (i == 0)) {continue;}
+      if ((chrValue == '.') && (!blnDecimalSeen)) {blnDecimalSeen = true; continue;}
+      return false;
+    }
+  return blnDigitSeen;
+}
+
+boolean SimulatorRequestConfirmed(String strRequestedParameter, int intRequestedMode)
+{
+  if (!FeatureParameterIsNumeric(strRequestedParameter)) {return false;}
+  float fltRequested = strRequestedParameter.toFloat();
+  float fltActual = SimulatorStateParameterText(intRequestedMode).toFloat();
+  return blnSim && (intMode == intRequestedMode) && (abs(fltRequested - fltActual) < .001);
+}
+
+boolean BusyRequestConfirmed(String strRequestedParameter, int intRequestedMode)
+{
+  if (!FeatureParameterIsNumeric(strRequestedParameter)) {return false;}
+  float fltRequested = strRequestedParameter.toFloat();
+  float fltActual = BusyStateParameterText(intRequestedMode).toFloat();
+  return (!blnSim) && (intBusyMode == intRequestedMode) && (abs(fltRequested - fltActual) < .001);
+}
+
+long DSPDisplayValue()
+{
+  if (blnSim)
+    {
+      if ((intMode >= 0) && (intMode <= 4)) {return intTargetSN;}
+      if (intMode == 5) {return intMultipaths;}
+      if (intMode == 6) {return intFadeDepth_dB;}
+      if (intMode == 7) {return round(10000 * fltLogs[intFadeRatePtr]);}
+      if (intMode == 8) {return intTuneOffset;}
+      if (intMode == 9) {return round(100000 * fltLogs[intFMDevPtr]);}
+      if (intMode == 10) {return round(10000 * fltLogs[intFMRatePtr]);}
+      if ((intMode == 11) || (intMode == 12)) {return round(100000 * fltLogs[intGainLevel[intMode - 11]]);}
+      if ((intMode == 13) || (intMode == 14)) {return round(1000 * fltLogs[intGainLevel[intMode - 11]]);}
+      if (intMode == 15) {return intBandwidth;}
+      if (intMode == 16) {return intBaudRate[intBaudPtr];}
+      if ((intMode == 17) || (intMode == 18)) {return intTestFreqHz;}
+      return 0;
+    }
+  if (intBusyMode == 0) {return intAvg;}
+  if (intBusyMode == 1) {return blnEnbBusyDetect ? 1 : 0;}
+  if (intBusyMode == 2) {return intBusyBWLoHz;}
+  if (intBusyMode == 3) {return intBusyBWHiHz;}
+  if (intBusyMode == 4) {return intThresh;}
+  if (intBusyMode == 5) {return intTestFreqHz;}
+  if (intBusyMode == 6) {return blnEnableTestTone ? 1 : 0;}
+  if (intBusyMode == 7) {return intGainLevel[0];}
+  if (intBusyMode == 8) {return intBandwidth;}
+  if (intBusyMode == 9) {return blnPlotSpectrum ? 1 : 0;}
+  return 0;
+}
+
+void RenderDSPStateToTFT()
+{
+  String str1; String str2; String str3;
+  if (blnSim)
+    {
+      if ((intMode < 0) || (intMode > 16)) {return;}
+      str1 = chrModes[intMode];
+      if (intMode <= 4) {str2 = "    S:N= " + String(intTargetSN); str3 = " dB";}
+      else if (intMode == 5) {str2 = "    " + String(intMultipaths);}
+      else if (intMode == 6) {str2 = "    " + String(intFadeDepth_dB); str3 = " dB";}
+      else if (intMode == 7) {str2 = "    " + String(10 * fltLogs[intFadeRatePtr]); str3 = " Hz";}
+      else if (intMode == 8) {str2 = "    " + String(intTuneOffset); str3 = " Hz";}
+      else if (intMode == 9) {str2 = "    " + String(100 * fltLogs[intFMDevPtr]); str3 = " Hz";}
+      else if (intMode == 10) {str2 = "    " + String(10 * fltLogs[intFMRatePtr]); str3 = " Hz";}
+      else if ((intMode == 11) || (intMode == 12)) {str2 = "    " + String(100 * fltLogs[intGainLevel[intMode - 11]]);}
+      else if ((intMode == 13) || (intMode == 14)) {str2 = "    " + String(fltLogs[intGainLevel[intMode - 11]]);}
+      else if (intMode == 15) {str2 = "    " + String(intBandwidth); str3 = " Hz";}
+      else if (intMode == 16) {str2 = "    " + String(intBaudRate[intBaudPtr]); str3 = " Baud";}
+    }
+  else
+    {
+      if ((intBusyMode < 0) || (intBusyMode > 9)) {return;}
+      str1 = chrBusyModes[intBusyMode];
+      if (intBusyMode == 0) {str2 = "    AVG= " + String(intAvg);}
+      else if (intBusyMode == 1) {str2 = "";}
+      else if (intBusyMode == 2) {str2 = "    " + String(intBusyBWLoHz); str3 = " Hz";}
+      else if (intBusyMode == 3) {str2 = "    " + String(intBusyBWHiHz); str3 = " Hz";}
+      else if (intBusyMode == 4) {str2 = "    " + String(intThresh); str3 = " dB";}
+      else if (intBusyMode == 5) {str2 = "    " + String(intTestFreqHz); str3 = " Hz";}
+      else if (intBusyMode == 6) {str2 = "";}
+      else if (intBusyMode == 7) {str2 = "    " + String(fltLogs[intGainLevel[0]]);}
+      else if (intBusyMode == 8) {str2 = "    " + String(intBandwidth); str3 = " Hz";}
+      else if (intBusyMode == 9) {str2 = blnPlotSpectrum ? "    ON" : "    OFF";}
+    }
+  UpdateTFTModeParameter(str1, str2, str3);
+}
+
+void DisplayWatchdog(boolean blnForce)
+{
+  if (blnTFTMirrorDrawing || blnPlotSpectrum || (blnSim && (blnTestMode3K || blnTestMode6K))) {return;}
+  unsigned long ulngNow = millis();
+  if ((!blnForce) && ((ulngNow - ulngLastTFTWatchdogMs) < 250)) {return;}
+  ulngLastTFTWatchdogMs = ulngNow;
+  int intExpectedMode = blnSim ? intMode : intBusyMode;
+  long lngExpectedValue = DSPDisplayValue();
+  boolean blnPeriodicRefresh = (ulngNow - ulngLastTFTRefreshMs) >= 30000;
+  boolean blnStateChanged = (!blnTFTStateValid) || (blnTFTStateSim != blnSim) ||
+                            (intTFTStateMode != intExpectedMode) || (lngTFTStateValue != lngExpectedValue);
+  if (blnForce || blnPeriodicRefresh || blnStateChanged)
+    {
+      blnTFTMirrorDrawing = true;
+      RenderDSPStateToTFT();
+      blnTFTStateValid = true; blnTFTStateSim = blnSim;
+      intTFTStateMode = intExpectedMode; lngTFTStateValue = lngExpectedValue;
+      ulngLastTFTRefreshMs = ulngNow;
+      blnTFTMirrorDrawing = false;
+    }
+}
+
+void PrintDSPStateAck(boolean blnConfirmed)
+{
+  Serial.print("ACK ");
+  if (blnSim)
+    {
+      Serial.print(StateModeToken(chrModes[intMode])); Serial.print(":"); Serial.print(SimulatorStateParameterText(intMode));
+    }
+  else
+    {
+      Serial.print("BUSY/"); Serial.print(StateModeToken(chrBusyModes[intBusyMode]));
+      Serial.print(":"); Serial.print(BusyStateParameterText(intBusyMode));
+    }
+  Serial.println(blnConfirmed ? " OK" : " ERROR");
+}
+
+void PrintStatus()
+{
+  Serial.print("STATUS MODE=");
+  if (blnSim) {Serial.print(StateModeToken(chrModes[intMode])); Serial.print(" S:N="); Serial.print(intTargetSN);}
+  else {Serial.print("BUSY"); Serial.print(" S:N="); Serial.print(intDetectSN);}
+  Serial.println(" dB");
+}
+
+void PrintLevel()
+{
+  Serial.print("LEVEL "); Serial.print(fltppLPInputMeasAvg, 1); Serial.println(" mVp-p");
+}
+
+void PrintHelp()
+{
+  Serial.println(F("HELP IONOS SIM Rev 2.03"));
+  Serial.println(F("SIM: WGN|MPG|MPM|MPP|MPD:<S:N -40..40 dB>"));
+  Serial.println(F("SIM: MULTIPATHS:<2|4>"));
+  Serial.println(F("SIM: FADE DEPTH:<0..40 dB>"));
+  Serial.println(F("SIM: FADE FREQ:<0|0.1|0.2|0.5|1|2|5|10|20 Hz>"));
+  Serial.println(F("SIM: OFFSET:<-200..200 Hz>"));
+  Serial.println(F("SIM: FM DEVIATION:<0|1|2|5|10|20|50|100|200 Hz>"));
+  Serial.println(F("SIM: FM RATE:<0|0.1|0.2|0.5|1|2|5|10|20 Hz>"));
+  Serial.println(F("SIM: CH1 IN|CH2 IN:<0|1|2|5|10|20|50|100|200>"));
+  Serial.println(F("SIM: CH1 OUT|CH2 OUT:<0|0.01|0.02|0.05|0.1|0.2|0.5|1|2>"));
+  Serial.println(F("SIM: BANDWIDTH:<3000|6000 Hz> | BUSY"));
+  Serial.println(F("BUSY: ENB BUSY:<1..50> | DIS BUSY:0 | LOW:<43..5000> | HIGH:<500..6000>"));
+  Serial.println(F("BUSY: THRESH:<3..40> | TONE ON:<43..6300> | TONE OFF:0"));
+  Serial.println(F("BUSY: CH1 IN:<index 0..8> | BANDWIDTH:<3000|6000> | SPECTRUM:<0|1> | SIM"));
+  Serial.println(F("QUERY: STATUS | LEVEL | HELP"));
+  Serial.println(F("REPLY: legacy OK or ? followed by ACK <DSP-state> OK|ERROR"));
+  Serial.println(F("END HELP"));
+}
+
+
 
 // **** Subroutine to  AvgerageFFTBins *********************************************************
 void AvgFFTBins(boolean blnInit, float fltKavg, int intLoFHz, int intHiFHz)
@@ -1662,6 +1767,7 @@ void setup()
   blnSim = true;  blnInitialized = false; blnEnableTestTone = false; blnPlotSpectrum = false; blnInitSpectrum = false; 
   blnModes = true; blnInitModes = true; blnColon = false;  blnChanBusySent = false;  blnChanClearSent = false; blnPlotBusyRed = false;  blnEnbBusyDetect = false;
   blnTestMode3K = false; blnTestMode6K = false; blnInitializedFromEEPROM = false;
+  blnTFTStateValid = false; ulngLastTFTWatchdogMs = 0; ulngLastTFTRefreshMs = 0;
 
   ulngLastSpectrumUpdateMs = millis(); 
 
@@ -2550,7 +2656,12 @@ void loop()
           //Serial.print("Parameter=");
           //Serial.println(strParameter.toUpperCase());//Shift to upper makes all case insensitive
           intSerialCmdMode = -1; intSerialCmdParam = -1;
-          if (blnSim)
+          boolean blnCommandStartedInSim = blnSim;
+          String strCmd = strMode; strCmd.trim(); strCmd = strCmd.toUpperCase();
+          if (strCmd == "STATUS") {PrintStatus();}
+          else if (strCmd == "LEVEL") {PrintLevel();}
+          else if (strCmd == "HELP") {PrintHelp();}
+          else if (blnSim)
             {
               intSerialCmdMode = ParseSimMode(strMode);
               if (intSerialCmdMode == 18)//  Moved to 18 to accomodate TEST3K, TEST6K
@@ -2567,12 +2678,8 @@ void loop()
                       Serial.println("OK"); //Serial Command is OK
                       intMode = intSerialCmdMode;
                       blnInitialized = false;
-                      if (intSerialCmdMode < 5)
-                        {
-                          ParseSetParameter(strParameter, intSerialCmdMode);
-                        }
                     }
-                  else { Serial.println("?"); }//Serial Command fail}
+                  else {Serial.println("?");}//Serial Command fail
                 }
               else {Serial.println("?");}
             }
@@ -2592,6 +2699,20 @@ void loop()
                 }
               else {Serial.println("?");}
             }
+          if ((strCmd != "STATUS") && (strCmd != "LEVEL") && (strCmd != "HELP"))
+            {
+              if (blnCommandStartedInSim)
+                {
+                  if (!blnSim) {PrintDSPStateAck(true);}
+                  else {PrintDSPStateAck((intSerialCmdMode > -1) && SimulatorRequestConfirmed(strParameter, intSerialCmdMode));}
+                }
+              else
+                {
+                  if (blnSim) {Serial.println("ACK SIM OK");}
+                  else {PrintDSPStateAck((intSerialCmdMode > -1) && BusyRequestConfirmed(strParameter, intSerialCmdMode));}
+                }
+              DisplayWatchdog(true);
+            }
           // Process the command by setting mode and parameter Set display to show just received mode/parameter
           strMode = ""; strParameter = ""; blnColon = false; //Initialize
         }
@@ -2599,6 +2720,7 @@ void loop()
     else if (blnColon == true) {strParameter += inChar;}//Accumulate the parameter
     else {strMode += inChar;} //Accumulate the mode
   }//End while Serial.available
+  DisplayWatchdog(false);
   intSerialCmdMode = -1; intSerialCmdParam = -1;
 
 }// End Main Loop *******************************************************************************
