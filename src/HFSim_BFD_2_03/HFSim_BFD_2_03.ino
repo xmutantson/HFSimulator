@@ -892,7 +892,7 @@ boolean ParseSetParameter(String strParameter, int intMode)
       if ((abs(fltLogs[j] - fltParam)) < .001)
       {
         intFMRatePtr = j;
-        str1 = chrModes[intMode]; str2 = "      " + String(100 * fltLogs[j]) ; str3 =  " Hz";
+        str1 = chrModes[intMode]; str2 = "      " + String(10 * fltLogs[j]) ; str3 =  " Hz";
         UpdateTFTModeParameter(str1, str2, "");
         return true;
       }
@@ -1055,6 +1055,23 @@ int ParseBusyMode (String strMode)
   return -1;
 }// End of ParseBusyMode ****************************************************************************
 
+// Reject empty or partially numeric values before String::toInt()/toFloat().
+boolean IsNumericParameter(String strValue)
+{
+  strValue.trim();
+  if (strValue.length() == 0) {return false;}
+  boolean blnDigitSeen = false; boolean blnDecimalSeen = false;
+  for (unsigned int i = 0; i < strValue.length(); i++)
+    {
+      char chrValue = strValue.charAt(i);
+      if ((chrValue >= '0') && (chrValue <= '9')) {blnDigitSeen = true; continue;}
+      if (((chrValue == '+') || (chrValue == '-')) && (i == 0)) {continue;}
+      if ((chrValue == '.') && (!blnDecimalSeen)) {blnDecimalSeen = true; continue;}
+      return false;
+    }
+  return blnDigitSeen;
+}
+
 //*******Function to Parse and Set Simulation Parameter received via Serial Port **********************
 boolean ParseSetSimParameter(String strParameter, int intMode)
 // Determins if strParameter is compatible with intMode. if not returns false
@@ -1076,7 +1093,15 @@ boolean ParseSetSimParameter(String strParameter, int intMode)
     {
       intParam = strParameter.toInt();
       if ((intParam == 2) || (intParam == 4))
-        { intMultipaths = intParam; return true; }
+        {
+          intMultipaths = intParam;
+          if ((::intMode >= 0) && (::intMode <= 4)) {SetIQTapDelays(::intMode);}
+          if (intMultipaths == 2)
+            {mixIQ1234.gain(0,1.0); mixIQ1234.gain(1,0.0); mixIQ1234.gain(2,0.0); mixIQ1234.gain(3,0.0);}
+          else
+            {mixIQ1234.gain(0,1.0); mixIQ1234.gain(1,1.0); mixIQ1234.gain(2,0.0); mixIQ1234.gain(3,0.0);}
+          return true;
+        }
       else {return false;}
     }
   if (intMode == 6)//FADE DEPTH
@@ -1102,6 +1127,16 @@ boolean ParseSetSimParameter(String strParameter, int intMode)
       if ((intParam >= -200) && (intParam <= 200))
         {
           intTuneOffset = intParam;
+          sine_VLF_Dnmix_Mod.amplitude(0);
+          sine_Dnmix.frequency(7700 - intTuneOffset); sine_Dnmix.amplitude(1.0);
+          sine_Upmix.frequency(7700); sine_Upmix.amplitude(1.0);
+          if (::intMode == 0)
+            {
+              if ((intTuneOffset != 0) || (intFMDevPtr != 0))
+                {mixPathSel.gain(0, 0.0); mixPathSel.gain(1, 2.0819); mixPathSel.gain(2, 0.0); mixPathSel.gain(3, 0.0);}
+              else
+                {mixPathSel.gain(0, .5); mixPathSel.gain(1, 0.0); mixPathSel.gain(2, 0.0); mixPathSel.gain(3, 0.0);}
+            }
           return true;
         }
     }
@@ -1113,6 +1148,13 @@ boolean ParseSetSimParameter(String strParameter, int intMode)
             intFMDevPtr = j;
             if (fltLogs[intFMDevPtr] <.01){sine_VLF_Dnmix_Mod.amplitude(0.0);}  
             else {sine_VLF_Dnmix_Mod.amplitude(fltLogs[intFMDevPtr] * .0129870129870 );} //sets max deviation in Hz e.g. .000129870129870 * 7700  yields +/- 1 Hz peak deviation
+            if (::intMode == 0)
+              {
+                if ((intTuneOffset != 0) || (intFMDevPtr != 0))
+                  {mixPathSel.gain(0, 0.0); mixPathSel.gain(1, 2.0819); mixPathSel.gain(2, 0.0); mixPathSel.gain(3, 0.0);}
+                else
+                  {mixPathSel.gain(0, .5); mixPathSel.gain(1, 0.0); mixPathSel.gain(2, 0.0); mixPathSel.gain(3, 0.0);}
+              }
             return true;
           }
     }
@@ -1258,7 +1300,7 @@ boolean ParseSetBusyParameter(String strParameter, int intMode)
   if (intMode == 7)//CH1 IN
   {
     intParam = strParameter.toInt();
-    if (( intParam >= 0) && (intParam <= 10))
+    if (( intParam >= 0) && (intParam < 9))
     {
       str1 = chrBusyModes[intMode];  str2 = "     " + String(fltLogs[intParam]); str3 = "";
       UpdateTFTModeParameter(str1, str2, str3);
@@ -1567,6 +1609,10 @@ void setup()
   filHP7500FIR.begin(sht7500HzHPCoef, 120); // LP Downmix already set
   sine_VLF_Dnmix_Mod.amplitude(0);sine_Upmix.frequency(7700); sine_Upmix.amplitude(1.0);
   sine_Dnmix.frequency(7700.0- intTuneOffset);sine_Dnmix.amplitude(1.0);
+  fltFadeRate = 10 * fltLogs[intFadeRatePtr];
+  sine_VLF_Dnmix_Mod.frequency(10 * fltLogs[intFMRatePtr]);
+  if ((intFMRatePtr == 0) || (intFMDevPtr == 0)) {sine_VLF_Dnmix_Mod.amplitude(0.0);}
+  else {sine_VLF_Dnmix_Mod.amplitude(fltLogs[intFMDevPtr] * .0129870129870);}
   ampRightOut.gain(fltLogs[intGainLevel[3]]); ampLeftOut.gain(fltLogs[intGainLevel[2]]);// default gain (half scale)[range = 0 to 2]
   SetIQTapDelays(intMode);
   mixInpSel.gain(0, 0); mixInpSel.gain(1, 0); mixInpSel.gain(2, 100 * fltLogs[intGainLevel[0]]); mixInpSel.gain(3, 100 * fltLogs[intGainLevel[1]]);
@@ -2420,10 +2466,15 @@ void loop()
               else if (intSerialCmdMode > -1)
                 {
                   //Serial.print("Line 2240: intSerialCmdMode = ");Serial.println(intSerialCmdMode);
-                  if (ParseSetSimParameter(strParameter, intSerialCmdMode))
+                  if (IsNumericParameter(strParameter) && ParseSetSimParameter(strParameter, intSerialCmdMode))
                     {
                       Serial.println("OK"); //Serial Command is OK
-                      if (intSerialCmdMode < 5){ ParseSetParameter(strParameter, intSerialCmdMode);}
+                      intMode = intSerialCmdMode;
+                      blnInitialized = false;
+                      if (intSerialCmdMode < 5)
+                        {
+                          ParseSetParameter(strParameter, intSerialCmdMode);
+                        }
                     }
                   else { Serial.println("?"); }//Serial Command fail}
                 }
@@ -2440,7 +2491,7 @@ void loop()
                 }
               else if (intSerialCmdMode > -1)
                 {
-                  if (ParseSetBusyParameter(strParameter, intSerialCmdMode)){ Serial.println("OK");} //Serial Command is OK
+                  if (IsNumericParameter(strParameter) && ParseSetBusyParameter(strParameter, intSerialCmdMode)){ Serial.println("OK");} //Serial Command is OK
                   else {Serial.println("?");} //Serial Command fail     
                 }
               else {Serial.println("?");}
