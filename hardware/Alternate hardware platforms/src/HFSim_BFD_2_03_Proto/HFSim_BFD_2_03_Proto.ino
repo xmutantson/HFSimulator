@@ -1616,6 +1616,7 @@ void PrintHelp()
   Serial.println(F("BUSY: THRESH:<3..40> | TONE ON:<43..6300> | TONE OFF:0"));
   Serial.println(F("BUSY: CH1 IN:<index 0..8> | BANDWIDTH:<3000|6000> | SPECTRUM:<0|1> | SIM"));
   Serial.println(F("QUERY: STATUS | LEVEL | HELP"));
+  Serial.println(F("MAINTENANCE: CODECINIT | RESET"));
   Serial.println(F("STATUS: live DSP settings, levels, applied generation, and build identity"));
   Serial.println(F("REPLY: OK or ? followed by ACK <DSP-state> GEN=<n> OK|ERROR"));
   Serial.println(F("END HELP"));
@@ -1804,6 +1805,11 @@ void InitializeParametersFromEEPROM()
   blnInitializedFromEEPROM = true; 
   return;
 }  //  End InitializeParametersFromEEPROM ****************************************************************
+
+void ReinitCodec()
+{
+  sgtl5000_1.enable(); sgtl5000_1.volume(.2);
+}
 
 // *******************************************************************************
 // *******************************************************************************
@@ -2749,7 +2755,21 @@ void loop()
           intSerialCmdMode = -1; intSerialCmdParam = -1;
           boolean blnCommandStartedInSim = blnSim;
           String strCmd = strMode; strCmd.trim(); strCmd = strCmd.toUpperCase();
-          if (strCmd == "STATUS") {PrintStatus();}
+          if (strCmd == "RESET")
+            {
+              Serial.println("OK RESET");
+              Serial.flush();
+              delay(50);
+              SCB_AIRCR = 0x05FA0004;
+              while (1) {}
+            }
+          else if (strCmd == "CODECINIT")
+            {
+              ReinitCodec();
+              ulngAppliedGeneration++;
+              Serial.print("OK CODECINIT GEN="); Serial.println(ulngAppliedGeneration);
+            }
+          else if (strCmd == "STATUS") {PrintStatus();}
           else if (strCmd == "LEVEL") {PrintLevel();}
           else if (strCmd == "HELP") {PrintHelp();}
           else if (blnSim)
@@ -2793,7 +2813,8 @@ void loop()
                 }
               else {Serial.println("?");}
             }
-          if ((strCmd != "STATUS") && (strCmd != "LEVEL") && (strCmd != "HELP"))
+          if ((strCmd != "STATUS") && (strCmd != "LEVEL") && (strCmd != "HELP") &&
+              (strCmd != "RESET") && (strCmd != "CODECINIT"))
             {
               if (blnCommandStartedInSim)
                 {

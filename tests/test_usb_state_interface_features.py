@@ -29,8 +29,16 @@ class USBStateInterfaceFeatureTest(unittest.TestCase):
                 self.assertIn('else if (strCmd == "LEVEL") {PrintLevel();}', source)
                 self.assertIn('else if (strCmd == "HELP") {PrintHelp();}', source)
                 self.assertIn('Serial.println(F("END HELP"))', source)
-                self.assertNotIn('strCmd == "RESET"', source)
-                self.assertNotIn('strCmd == "CODECINIT"', source)
+                self.assertIn('strCmd == "RESET"', source)
+                self.assertIn('strCmd == "CODECINIT"', source)
+                self.assertIn('Serial.println(F("MAINTENANCE: CODECINIT | RESET"))', source)
+
+                codec = section(source, 'else if (strCmd == "CODECINIT")', 'else if (strCmd == "STATUS")')
+                self.assertLess(codec.index("ReinitCodec();"), codec.index("OK CODECINIT"))
+                self.assertIn("ulngAppliedGeneration++", codec)
+
+                reset = section(source, 'if (strCmd == "RESET")', 'else if (strCmd == "CODECINIT")')
+                self.assertLess(reset.index("Serial.flush();"), reset.index("SCB_AIRCR"))
 
                 ack = section(source, "void PrintDSPStateAck(", "void PrintStatus()")
                 self.assertIn("SimulatorStateParameterText(intMode)", ack)
