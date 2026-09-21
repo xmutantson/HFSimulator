@@ -56,11 +56,13 @@ class SerialStateApplicationTest(unittest.TestCase):
                 self.assertIn("intFMDevPtr == 0", setup)
 
                 dispatch = source[source.index("while  (Serial.available() > 0") :]
-                self.assertGreaterEqual(
-                    dispatch.count(
-                        "IsNumericParameter(strParameter) && ParseSet"
-                    ),
-                    2,
+                self.assertIn(
+                    "SimulationParameterSyntaxValid(strParameter, intSerialCmdMode) && ParseSetSimParameter",
+                    dispatch,
+                )
+                self.assertIn(
+                    "IsIntegerParameter(strParameter) && ParseSetBusyParameter",
+                    dispatch,
                 )
 
                 fm_rate_display = function(

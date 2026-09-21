@@ -35,7 +35,35 @@ class USBStateInterfaceFeatureTest(unittest.TestCase):
                 ack = section(source, "void PrintDSPStateAck(", "void PrintStatus()")
                 self.assertIn("SimulatorStateParameterText(intMode)", ack)
                 self.assertIn("BusyStateParameterText(intBusyMode)", ack)
+                self.assertIn("ulngAppliedGeneration", ack)
                 self.assertIn('" OK" : " ERROR"', ack)
+
+                status = section(source, "void PrintStatus()", "void PrintLevel()")
+                for live_variable in (
+                    "chrModes[intMode]",
+                    "intTargetSN",
+                    "intMultipaths",
+                    "intFadeDepth_dB",
+                    "fltFadeRate",
+                    "intTuneOffset",
+                    "intGainLevel[0]",
+                    "intGainLevel[1]",
+                    "intGainLevel[2]",
+                    "intGainLevel[3]",
+                    "intBandwidth",
+                    "ulngAppliedGeneration",
+                    "chrBuildIdentity",
+                ):
+                    self.assertIn(live_variable, status)
+                self.assertIn("PrintLevelFields();", status)
+
+                level_fields = section(source, "void PrintLevelFields()", "void PrintStatus()")
+                for measured_level in (
+                    "fltppLPInputMeasAvg",
+                    "fltppAmpLeftOutAvg",
+                    "fltppAmpRightOutAvg",
+                ):
+                    self.assertIn(measured_level, level_fields)
 
                 watchdog = section(source, "void DisplayWatchdog(", "void PrintDSPStateAck(")
                 self.assertIn("RenderDSPStateToTFT()", watchdog)

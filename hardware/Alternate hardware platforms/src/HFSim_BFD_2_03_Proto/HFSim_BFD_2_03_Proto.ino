@@ -122,6 +122,22 @@ SWT2 Connect to pin 26
 #include <st7735_t3_font_Arial.h>
 //#include <Adafruit_FT6206.h>    // <-- Touch screen driver (not used)
 
+#if defined(__has_include)
+#if __has_include("BuildIdentity.h")
+#include "BuildIdentity.h"
+#endif
+#endif
+#ifndef HFSIM_GIT_DESCRIBE
+#define HFSIM_GIT_DESCRIBE "UNATTESTED"
+#endif
+#ifndef HFSIM_BUILD_UTC
+#define HFSIM_BUILD_UTC "UNATTESTED"
+#endif
+#if defined(HFSIM_RELEASE_BUILD) && (!defined(HFSIM_BUILD_IDENTITY_ATTESTED) || (HFSIM_BUILD_IDENTITY_ATTESTED != 1))
+#error "Release builds require an attested BuildIdentity.h"
+#endif
+static const char chrBuildIdentity[] = HFSIM_GIT_DESCRIBE "@" HFSIM_BUILD_UTC;
+
 // For the Adafruit shield  Proto ST7798, these are the default. 
 #define TFT_DC  9
 #define TFT_CS 10
@@ -302,6 +318,7 @@ boolean blnDisplayLvl = true;
 // Unsigned long
 unsigned long ulngLastSpectrumUpdateMs = millis(); unsigned long ulngLastLevelDisplayMs = millis();
 unsigned long ulngLastTFTWatchdogMs = 0; unsigned long ulngLastTFTRefreshMs = 0;
+unsigned long ulngAppliedGeneration = 0;
 unsigned long ulngLastDelayUpdateUs; unsigned long ulngCurrentElapsedTimeUs ; unsigned long ulngLastPPAvgTimeUs; unsigned long ulngLastSNUpdateUs;
 
 // Long
@@ -963,6 +980,41 @@ void SetIQTapDelays(int intMode)
     //Serial.print("Line 1014 SetIQTapDelays: intMode = ");Serial.print(intMode); Serial.print("  Paths:"); Serial.println(intMultipaths);
 } // End SetIQTapDelays **************************************************************************
 
+boolean ApplyChannelMode(int intRequestedMode)
+{
+  if ((!blnSim) || (intRequestedMode < 0) || (intRequestedMode > 4)) {return false;}
+
+  intMode = intRequestedMode;
+  blnTestMode3K = false; blnTestMode6K = false; blnEnableTestTone = false;
+  InputTestWaveform.amplitude(0);
+  mixInpSel.gain(0, 0); mixInpSel.gain(1, 0.0);
+  mixInpSel.gain(2, 100 * fltLogs[intGainLevel[0]]); mixInpSel.gain(3, 100 * fltLogs[intGainLevel[1]]);
+  ampLeftOut.gain(fltLogs[intGainLevel[2]]); ampRightOut.gain(fltLogs[intGainLevel[3]]);
+  intCountrmsMixIQ1234Out = 0;
+  SetIQTapDelays(intMode);
+
+  if (intMode == 0)
+    {
+      mixIQ12.gain(0, 0.0); mixIQ12.gain(1, .8498); mixIQ12.gain(2, 0.0); mixIQ12.gain(3, 0.0);
+      mixIQ1234.gain(0, 1.0); mixIQ1234.gain(1, 0.0); mixIQ1234.gain(2, 0.0); mixIQ1234.gain(3, 0.0);
+      if ((intTuneOffset != 0) || (intFMDevPtr != 0))
+        {mixPathSel.gain(0, 0.0); mixPathSel.gain(1, 2.0819); mixPathSel.gain(2, 0.0); mixPathSel.gain(3, 0.0);}
+      else
+        {mixPathSel.gain(0, .5); mixPathSel.gain(1, 0.0); mixPathSel.gain(2, 0.0); mixPathSel.gain(3, 0.0);}
+    }
+  else
+    {
+      mixPathSel.gain(0, .5); mixPathSel.gain(1, 0.0); mixPathSel.gain(2, 0.0); mixPathSel.gain(3, 0.0);
+      if (intMultipaths == 2)
+        {mixIQ1234.gain(0, 1.0); mixIQ1234.gain(1, 0.0); mixIQ1234.gain(2, 0.0); mixIQ1234.gain(3, 0.0);}
+      else
+        {mixIQ1234.gain(0, 1.0); mixIQ1234.gain(1, 1.0); mixIQ1234.gain(2, 0.0); mixIQ1234.gain(3, 0.0);}
+    }
+
+  blnModes = true; blnInitialized = true;
+  ulngAppliedGeneration++;
+  return true;
+}
 
 //******Function to Parse Simulator Mode received via Serial Port *********************************
 int ParseSimMode (String strMode)
@@ -1022,6 +1074,26 @@ boolean IsNumericParameter(String strValue)
       return false;
     }
   return blnDigitSeen;
+}
+
+boolean IsIntegerParameter(String strValue)
+{
+  strValue.trim();
+  if (strValue.length() == 0) {return false;}
+  unsigned int intStart = ((strValue.charAt(0) == '+') || (strValue.charAt(0) == '-')) ? 1 : 0;
+  if (intStart == strValue.length()) {return false;}
+  for (unsigned int i = intStart; i < strValue.length(); i++)
+    {
+      if ((strValue.charAt(i) < '0') || (strValue.charAt(i) > '9')) {return false;}
+    }
+  return true;
+}
+
+boolean SimulationParameterSyntaxValid(String strValue, int intRequestedMode)
+{
+  if ((intRequestedMode <= 6) || (intRequestedMode == 8) || (intRequestedMode == 15))
+    {return IsIntegerParameter(strValue);}
+  return IsNumericParameter(strValue);
 }
 
 //*******Function to Parse and Set Simulation Parameter received via Serial Port **********************
@@ -1378,7 +1450,8 @@ boolean SimulatorRequestConfirmed(String strRequestedParameter, int intRequested
   if (!FeatureParameterIsNumeric(strRequestedParameter)) {return false;}
   float fltRequested = strRequestedParameter.toFloat();
   float fltActual = SimulatorStateParameterText(intRequestedMode).toFloat();
-  return blnSim && (intMode == intRequestedMode) && (abs(fltRequested - fltActual) < .001);
+  boolean blnModeConfirmed = (intRequestedMode >= 5) || (intMode == intRequestedMode);
+  return blnSim && blnModeConfirmed && (abs(fltRequested - fltActual) < .001);
 }
 
 boolean BusyRequestConfirmed(String strRequestedParameter, int intRequestedMode)
@@ -1491,20 +1564,39 @@ void PrintDSPStateAck(boolean blnConfirmed)
       Serial.print("BUSY/"); Serial.print(StateModeToken(chrBusyModes[intBusyMode]));
       Serial.print(":"); Serial.print(BusyStateParameterText(intBusyMode));
     }
+  Serial.print(" GEN="); Serial.print(ulngAppliedGeneration);
   Serial.println(blnConfirmed ? " OK" : " ERROR");
+}
+
+void PrintLevelFields()
+{
+  Serial.print(" INPUT_MVPP="); Serial.print(fltppLPInputMeasAvg, 1);
+  Serial.print(" LEFT_OUT_MVPP="); Serial.print(fltppAmpLeftOutAvg, 1);
+  Serial.print(" RIGHT_OUT_MVPP="); Serial.print(fltppAmpRightOutAvg, 1);
 }
 
 void PrintStatus()
 {
   Serial.print("STATUS MODE=");
-  if (blnSim) {Serial.print(StateModeToken(chrModes[intMode])); Serial.print(" S:N="); Serial.print(intTargetSN);}
-  else {Serial.print("BUSY"); Serial.print(" S:N="); Serial.print(intDetectSN);}
-  Serial.println(" dB");
+  if (blnSim) {Serial.print(StateModeToken(chrModes[intMode])); Serial.print(" S:N_DB="); Serial.print(intTargetSN);}
+  else {Serial.print("BUSY"); Serial.print(" S:N_DB="); Serial.print(intDetectSN);}
+  Serial.print(" MULTIPATHS="); Serial.print(intMultipaths);
+  Serial.print(" FADE_DEPTH_DB="); Serial.print(intFadeDepth_dB);
+  Serial.print(" FADE_RATE_HZ="); Serial.print(fltFadeRate, 2);
+  Serial.print(" OFFSET_HZ="); Serial.print(intTuneOffset);
+  Serial.print(" CH1_IN_GAIN="); Serial.print(100 * fltLogs[intGainLevel[0]], 2);
+  Serial.print(" CH2_IN_GAIN="); Serial.print(100 * fltLogs[intGainLevel[1]], 2);
+  Serial.print(" CH1_OUT_GAIN="); Serial.print(fltLogs[intGainLevel[2]], 2);
+  Serial.print(" CH2_OUT_GAIN="); Serial.print(fltLogs[intGainLevel[3]], 2);
+  Serial.print(" BANDWIDTH_HZ="); Serial.print(intBandwidth);
+  Serial.print(" GEN="); Serial.print(ulngAppliedGeneration);
+  PrintLevelFields();
+  Serial.print(" BUILD="); Serial.println(chrBuildIdentity);
 }
 
 void PrintLevel()
 {
-  Serial.print("LEVEL "); Serial.print(fltppLPInputMeasAvg, 1); Serial.println(" mVp-p");
+  Serial.print("LEVEL"); PrintLevelFields(); Serial.println();
 }
 
 void PrintHelp()
@@ -1524,7 +1616,8 @@ void PrintHelp()
   Serial.println(F("BUSY: THRESH:<3..40> | TONE ON:<43..6300> | TONE OFF:0"));
   Serial.println(F("BUSY: CH1 IN:<index 0..8> | BANDWIDTH:<3000|6000> | SPECTRUM:<0|1> | SIM"));
   Serial.println(F("QUERY: STATUS | LEVEL | HELP"));
-  Serial.println(F("REPLY: legacy OK or ? followed by ACK <DSP-state> OK|ERROR"));
+  Serial.println(F("STATUS: live DSP settings, levels, applied generation, and build identity"));
+  Serial.println(F("REPLY: OK or ? followed by ACK <DSP-state> GEN=<n> OK|ERROR"));
   Serial.println(F("END HELP"));
 }
 
@@ -1757,9 +1850,11 @@ void setup()
 
   //this prints out a 8 digit hex SN unique to the Specific teensy  
   tft.setTextColor(ST7735_MAGENTA);tft.setCursor(0,180);tft.print(" Serial: "); tft.printf("%08X",OCOTP_CFG0);
+  tft.setTextColor(ST7735_YELLOW); tft.setTextSize(1); tft.setCursor(0,220); tft.println(chrBuildIdentity);
   delay(4000);
 
-  Serial.print("IONOS SIM ");Serial.print(strRevision); Serial.print(" Serial: ");Serial.printf("%08X",OCOTP_CFG0);Serial.println("");
+  Serial.print("IONOS SIM ");Serial.print(strRevision); Serial.print(" Serial: ");Serial.printf("%08X",OCOTP_CFG0);
+  Serial.print(" Build: "); Serial.println(chrBuildIdentity);
 
   //This sets up all non static variables as the would be upon power on to eanble clean startup from SIM: command
   strMode = ""; strParameter= "";
@@ -1858,7 +1953,8 @@ void loop()
           intMode = intMode + (lngENC2New - lngENC2Old);
           if (intMode > 18) {intMode = 18;} //Hold at limit
           if (intMode < 0 ){intMode = 0;}
-          if (intMode < 17)
+          if (intMode <= 4) {ApplyChannelMode(intMode);}
+          else if (intMode < 17)
             {
               blnTestMode3K = false; blnTestMode6K = false;  blnEnableTestTone = false;
               InputTestWaveform.amplitude(0);
@@ -1883,11 +1979,6 @@ void loop()
                   blnModes = true;
                 }
               }
-          if ((intMode >= 1) && (intMode <= 4))
-            {
-             SetIQTapDelays(intMode);
-              blnModes = true; 
-            }
         }
       // tft.begin();
       //tft.setRotation(3);
@@ -2673,16 +2764,16 @@ void loop()
               else if (intSerialCmdMode > -1)
                 {
                   //Serial.print("Line 2240: intSerialCmdMode = ");Serial.println(intSerialCmdMode);
-                  if (IsNumericParameter(strParameter) && ParseSetSimParameter(strParameter, intSerialCmdMode))
+                  if (SimulationParameterSyntaxValid(strParameter, intSerialCmdMode) && ParseSetSimParameter(strParameter, intSerialCmdMode))
                     {
-                      Serial.println("OK"); //Serial Command is OK
                       if (intSerialCmdMode < 5)
                         {
-                          intMode = intSerialCmdMode;
-                          blnInitialized = false;
+                          if (ApplyChannelMode(intSerialCmdMode)) {Serial.println("OK");}
+                          else {Serial.println("?"); intSerialCmdMode = -1;}
                         }
+                      else {ulngAppliedGeneration++; Serial.println("OK");}
                     }
-                  else {Serial.println("?");}//Serial Command fail
+                  else {Serial.println("?"); intSerialCmdMode = -1;}//Serial Command fail
                 }
               else {Serial.println("?");}
             }
@@ -2697,8 +2788,8 @@ void loop()
                 }
               else if (intSerialCmdMode > -1)
                 {
-                  if (IsNumericParameter(strParameter) && ParseSetBusyParameter(strParameter, intSerialCmdMode)){ Serial.println("OK");} //Serial Command is OK
-                  else {Serial.println("?");} //Serial Command fail     
+                  if (IsIntegerParameter(strParameter) && ParseSetBusyParameter(strParameter, intSerialCmdMode)){ulngAppliedGeneration++; Serial.println("OK");} //Serial Command is OK
+                  else {Serial.println("?"); intSerialCmdMode = -1;} //Serial Command fail
                 }
               else {Serial.println("?");}
             }

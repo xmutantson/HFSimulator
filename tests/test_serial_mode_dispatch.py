@@ -25,9 +25,8 @@ class SerialModeDispatchTest(unittest.TestCase):
     def test_channel_mode_commands_apply_and_reinitialize_the_selected_mode(self):
         for firmware in FIRMWARES:
             with self.subTest(firmware=str(firmware.relative_to(ROOT))):
-                block = successful_serial_simulation_dispatch(
-                    firmware.read_text(encoding="utf-8")
-                )
+                source = firmware.read_text(encoding="utf-8")
+                block = successful_serial_simulation_dispatch(source)
                 guard = re.search(
                     r"if\s*\(intSerialCmdMode\s*<\s*5\)\s*\{(?P<body>.*?)\}",
                     block,
@@ -37,8 +36,21 @@ class SerialModeDispatchTest(unittest.TestCase):
                     guard,
                     "only channel-profile selectors may replace the live mode",
                 )
-                self.assertRegex(guard.group("body"), r"\bintMode\s*=\s*intSerialCmdMode\s*;")
-                self.assertRegex(guard.group("body"), r"\bblnInitialized\s*=\s*false\s*;")
+                self.assertIn("ApplyChannelMode(intSerialCmdMode)", guard.group("body"))
+                self.assertLess(
+                    guard.group("body").index("ApplyChannelMode(intSerialCmdMode)"),
+                    guard.group("body").index('Serial.println("OK")'),
+                    "the DSP profile must be applied before its acknowledgment",
+                )
+
+                apply = source[
+                    source.index("boolean ApplyChannelMode(") : source.index(
+                        "int ParseSimMode", source.index("boolean ApplyChannelMode(")
+                    )
+                ]
+                self.assertIn("intMode = intRequestedMode;", apply)
+                self.assertIn("SetIQTapDelays(intMode);", apply)
+                self.assertIn("ulngAppliedGeneration++;", apply)
 
 
 if __name__ == "__main__":
