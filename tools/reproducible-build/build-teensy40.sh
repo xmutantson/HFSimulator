@@ -90,6 +90,7 @@ compile_once() {
   rm -rf -- "${WORK_DIRECTORY}" "${BUILD_DIRECTORY}" "${EXPORT_DIRECTORY}"
   mkdir -p "${WORK_DIRECTORY}" "${BUILD_DIRECTORY}" "${EXPORT_DIRECTORY}"
   git -C "${REPOSITORY_ROOT}" archive --format=tar HEAD | tar -xf - -C "${WORK_DIRECTORY}"
+  cp -a "${WORK_DIRECTORY}/src/libraries/Encoder/utility" "${WORK_DIRECTORY}/src/HFSim_BFD_2_03/utility"
   write_identity_header "${WORK_DIRECTORY}/src/HFSim_BFD_2_03"
 
   local run_output="${OUTPUT_ABSOLUTE}/${run_name}"
@@ -104,7 +105,6 @@ compile_once() {
     --library "${WORK_DIRECTORY}/src/libraries/Audio" \
     --library "${WORK_DIRECTORY}/src/libraries/Bounce2" \
     --library "${WORK_DIRECTORY}/src/libraries/ILI9341_t3" \
-    --library "${WORK_DIRECTORY}/src/libraries/Encoder" \
     --warnings all \
     --verbose \
     "${WORK_DIRECTORY}/src/HFSim_BFD_2_03" \

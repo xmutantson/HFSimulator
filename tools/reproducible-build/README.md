@@ -7,7 +7,7 @@ The build wrapper requires the audited toolchain and refuses substitutions:
 - `teensy-compile` 15.2.1
 - Teensy tools, discovery, and monitor 1.62.0
 - FQBN `teensy:avr:teensy40:usb=serial,speed=600,opt=o2std,keys=en-us`
-- Audio, Bounce2, ILI9341_t3, Encoder, and sketch-local Encoder2 from this repository
+- Audio, Bounce2, ILI9341_t3, sketch-local Encoder2, and its Encoder utility headers from this repository
 
 Choose one UTC value once and retain it with the build output. From a clean checkout:
 
