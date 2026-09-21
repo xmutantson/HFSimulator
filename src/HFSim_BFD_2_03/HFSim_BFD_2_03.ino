@@ -1796,7 +1796,7 @@ void loop()
       tft.begin();
       tft.setRotation(1);
       tft.fillScreen(ILI9341_BLACK);
-      if ((intMode == 0) || (! blnInitialized))//WGN
+      if (intMode == 0)//WGN
         {
           intCountrmsMixIQ1234Out = 0;
           SetIQTapDelays(intMode);
