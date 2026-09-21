@@ -48,7 +48,8 @@ trap 'rm -rf -- "${STAGING_ROOT}"' EXIT
 readonly WORK_DIRECTORY="${STAGING_ROOT}/work"
 readonly BUILD_DIRECTORY="${STAGING_ROOT}/build"
 readonly EXPORT_DIRECTORY="${STAGING_ROOT}/export"
-export SOURCE_DATE_EPOCH="$(date -u -d "${BUILD_UTC}" +%s)"
+readonly BUILD_UTC_ISO="${BUILD_UTC:0:4}-${BUILD_UTC:4:2}-${BUILD_UTC:6:2} ${BUILD_UTC:9:2}:${BUILD_UTC:11:2}:${BUILD_UTC:13:2} UTC"
+export SOURCE_DATE_EPOCH="$(date -u -d "${BUILD_UTC_ISO}" +%s)"
 
 write_identity_header() {
   local sketch_directory="$1"
@@ -79,6 +80,7 @@ write_manifest() {
     printf 'audio_tree=%s\n' "$(git -C "${REPOSITORY_ROOT}" rev-parse HEAD:src/libraries/Audio)"
     printf 'bounce2_tree=%s\n' "$(git -C "${REPOSITORY_ROOT}" rev-parse HEAD:src/libraries/Bounce2)"
     printf 'ili9341_t3_tree=%s\n' "$(git -C "${REPOSITORY_ROOT}" rev-parse HEAD:src/libraries/ILI9341_t3)"
+    printf 'encoder_tree=%s\n' "$(git -C "${REPOSITORY_ROOT}" rev-parse HEAD:src/libraries/Encoder)"
     printf 'encoder2_h_sha256=%s\n' "$(git -C "${REPOSITORY_ROOT}" show HEAD:src/HFSim_BFD_2_03/Encoder2.h | sha256sum | awk '{print $1}')"
   } > "${destination}"
 }
@@ -102,6 +104,7 @@ compile_once() {
     --library "${WORK_DIRECTORY}/src/libraries/Audio" \
     --library "${WORK_DIRECTORY}/src/libraries/Bounce2" \
     --library "${WORK_DIRECTORY}/src/libraries/ILI9341_t3" \
+    --library "${WORK_DIRECTORY}/src/libraries/Encoder" \
     --warnings all \
     --verbose \
     "${WORK_DIRECTORY}/src/HFSim_BFD_2_03" \
