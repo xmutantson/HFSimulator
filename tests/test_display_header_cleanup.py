@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PRODUCTION_FIRMWARE = ROOT / "src" / "HFSim_BFD_2_03" / "HFSim_BFD_2_03.ino"
+PRODUCTION_FIRMWARE = ROOT / "src" / "HFSim_BFD_2_04" / "HFSim_BFD_2_04.ino"
 
 
 class DisplayHeaderCleanupTest(unittest.TestCase):

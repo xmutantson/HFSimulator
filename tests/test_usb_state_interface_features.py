@@ -4,13 +4,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FIRMWARES = (
-    ROOT / "src" / "HFSim_BFD_2_03" / "HFSim_BFD_2_03.ino",
+    ROOT / "src" / "HFSim_BFD_2_04" / "HFSim_BFD_2_04.ino",
     ROOT
     / "hardware"
     / "Alternate hardware platforms"
     / "src"
-    / "HFSim_BFD_2_03_Proto"
-    / "HFSim_BFD_2_03_Proto.ino",
+    / "HFSim_BFD_2_04_Proto"
+    / "HFSim_BFD_2_04_Proto.ino",
 )
 
 
@@ -24,6 +24,10 @@ class USBStateInterfaceFeatureTest(unittest.TestCase):
         for firmware in FIRMWARES:
             with self.subTest(firmware=str(firmware.relative_to(ROOT))):
                 source = firmware.read_text(encoding="utf-8")
+
+                self.assertIn('#define HFSIM_FIRMWARE_REVISION "2.04"', source)
+                self.assertIn('Serial.print(" REV=" HFSIM_FIRMWARE_REVISION)', source)
+                self.assertIn('F("HELP IONOS SIM Rev " HFSIM_FIRMWARE_REVISION)', source)
 
                 self.assertIn('if (strCmd == "STATUS") {PrintStatus();}', source)
                 self.assertIn('else if (strCmd == "LEVEL") {PrintLevel();}', source)

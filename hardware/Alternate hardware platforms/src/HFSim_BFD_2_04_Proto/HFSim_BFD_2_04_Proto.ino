@@ -26,6 +26,7 @@
 
     Change  Log:
     Date:     Rev:      Description:
+    9/21/2026    2.04   Bump the consolidated firmware revision and sketch name.
     11/17/2020   2.03   Modify multipath delay settings for 4 path mode as suggested by Peter Helfert.
 
     11/7/2020    2.02   Make mods to 4 path implementation and re calibration fltSTD values for correct long term average level.
@@ -137,6 +138,7 @@ SWT2 Connect to pin 26
 #error "Release builds require an attested BuildIdentity.h"
 #endif
 static const char chrBuildIdentity[] = HFSIM_GIT_DESCRIBE "@" HFSIM_BUILD_UTC;
+#define HFSIM_FIRMWARE_REVISION "2.04"
 
 // For the Adafruit shield  Proto ST7798, these are the default. 
 #define TFT_DC  9
@@ -303,7 +305,7 @@ static char  *chrBusyModes[] = {"ENB BUSY:       ", "DIS BUSY:       ", "LOW:   
                                };
 
 // Strings
-String strMode = ""; String strParameter = ""; String strRevision = "    Rev 2.03-Proto";
+String strMode = ""; String strParameter = ""; String strRevision = "    Rev " HFSIM_FIRMWARE_REVISION "-Proto";
 String strLastCF = ""; String strLastLevel = "";
 
 // Boolean
@@ -1580,6 +1582,7 @@ void PrintStatus()
   Serial.print("STATUS MODE=");
   if (blnSim) {Serial.print(StateModeToken(chrModes[intMode])); Serial.print(" S:N_DB="); Serial.print(intTargetSN);}
   else {Serial.print("BUSY"); Serial.print(" S:N_DB="); Serial.print(intDetectSN);}
+  Serial.print(" REV=" HFSIM_FIRMWARE_REVISION);
   Serial.print(" MULTIPATHS="); Serial.print(intMultipaths);
   Serial.print(" FADE_DEPTH_DB="); Serial.print(intFadeDepth_dB);
   Serial.print(" FADE_RATE_HZ="); Serial.print(fltFadeRate, 2);
@@ -1601,7 +1604,7 @@ void PrintLevel()
 
 void PrintHelp()
 {
-  Serial.println(F("HELP IONOS SIM Rev 2.03"));
+  Serial.println(F("HELP IONOS SIM Rev " HFSIM_FIRMWARE_REVISION));
   Serial.println(F("SIM: WGN|MPG|MPM|MPP|MPD:<S:N -40..40 dB>"));
   Serial.println(F("SIM: MULTIPATHS:<2|4>"));
   Serial.println(F("SIM: FADE DEPTH:<0..40 dB>"));
