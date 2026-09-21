@@ -26,6 +26,7 @@
 
     Change  Log:
     Date:     Rev:      Description:
+    9/21/2026    2.05   Classify the AdjustS_N calibration debug output by source: the fade loop's internal per-step S:N changes no longer print (so a running fade cannot flood the serial link), while operator-initiated changes (boot, front-panel dial, serial S:N command) still print one block. DEBUG ON|OFF verb re-enables the legacy per-step firehose and STATUS reports its state.
     9/21/2026    2.04   Bump the consolidated firmware revision and sketch name.
     11/17/2020   2.03   Modify multipath delay settings for 4 path mode as suggested by Peter Helfert.
 
@@ -138,7 +139,7 @@ SWT2 Connect to pin 26
 #error "Release builds require an attested BuildIdentity.h"
 #endif
 static const char chrBuildIdentity[] = HFSIM_GIT_DESCRIBE "@" HFSIM_BUILD_UTC;
-#define HFSIM_FIRMWARE_REVISION "2.04"
+#define HFSIM_FIRMWARE_REVISION "2.05"
 
 // For the Adafruit shield  Proto ST7798, these are the default. 
 #define TFT_DC  9
@@ -316,6 +317,7 @@ boolean blnModes = true; boolean blnInitModes = true; boolean blnColon = false; 
 boolean blnChanClearSent = false; boolean blnPlotBusyRed = false; boolean blnEnbBusyDetect = false;
 boolean blnTestMode3K = false; boolean blnTestMode6K = false; boolean blnInitializedFromEEPROM = false; boolean blnResetrmsMixIQCount = false; 
 boolean blnDisplayLvl = true;
+boolean blnDebugAdjustSN = false; // Opt-in DEBUG firehose: also print AdjustS_N calibration debug on the fade loop's internal per-step S:N changes. Default OFF so operator-initiated S:N changes (boot/dial/serial command) still print once, but a running fade cannot flood the serial link
 
 // Unsigned long
 unsigned long ulngLastSpectrumUpdateMs = millis(); unsigned long ulngLastLevelDisplayMs = millis();
@@ -484,7 +486,7 @@ short shtHilbertFIR_120TapCoeff[120]; //This array will be populated from the ab
 void(* resetFunc)(void) = 0;//declare reset function at address 0
 
 /* ****************Subroutine to adjust mixChannels gains to obtain desired S:N Simulation mode ********** */
-void AdjustS_N (int intDesiredSN_dB, float fltppLPInputMeasAvg)
+void AdjustS_N (int intDesiredSN_dB, float fltppLPInputMeasAvg, boolean blnOperatorSource)
 {
   //Sets the appropriate gains of mixChannels inputs 0,1 and 2 to obtain the desired S:N
   /*
@@ -517,7 +519,7 @@ void AdjustS_N (int intDesiredSN_dB, float fltppLPInputMeasAvg)
   mixChannels.gain(3, 0.0);//Insure other mixChannels input disabled  
    
     //  Debug printout for calibration 
-  if (intDesiredSN_dB != intLastDesiredSN_dB)
+  if ((blnOperatorSource || blnDebugAdjustSN) && (intDesiredSN_dB != intLastDesiredSN_dB))
     {
       Serial.println(" ");
       Serial.println("AdjustS_N:");
@@ -565,7 +567,7 @@ void Fade (int intMaxSN_dB, int intFadeDepth_dB, float fltFadeRateHz)
   float fltRunTimeSec = millis()/1000.0; //rollover only will happen every 50 days!
   intCurrentFadeSN_dB = intMaxSN_dB -  int((intFadeDepth_dB * .5 * (1 - cos(fltFadeRateHz * 2 * 3.14159 * fltRunTimeSec))));
   if (intCurrentFadeSN_dB < -40) { intCurrentFadeSN_dB = -40;} // bound minimum fade to intMinSN 
-  AdjustS_N (intCurrentFadeSN_dB , fltppLPInputMeasAvg);
+  AdjustS_N (intCurrentFadeSN_dB , fltppLPInputMeasAvg, false);// fade loop internal per-step S:N: never prints calibration debug (avoids blocking the serial chip inside the fade envelope loop) unless the DEBUG firehose is on
   return;
 }// **End Fade****************************************************************************************************
 
@@ -1583,6 +1585,7 @@ void PrintStatus()
   if (blnSim) {Serial.print(StateModeToken(chrModes[intMode])); Serial.print(" S:N_DB="); Serial.print(intTargetSN);}
   else {Serial.print("BUSY"); Serial.print(" S:N_DB="); Serial.print(intDetectSN);}
   Serial.print(" REV=" HFSIM_FIRMWARE_REVISION);
+  Serial.print(" DEBUG="); Serial.print(blnDebugAdjustSN ? "ON" : "OFF");
   Serial.print(" MULTIPATHS="); Serial.print(intMultipaths);
   Serial.print(" FADE_DEPTH_DB="); Serial.print(intFadeDepth_dB);
   Serial.print(" FADE_RATE_HZ="); Serial.print(fltFadeRate, 2);
@@ -1620,6 +1623,7 @@ void PrintHelp()
   Serial.println(F("BUSY: CH1 IN:<index 0..8> | BANDWIDTH:<3000|6000> | SPECTRUM:<0|1> | SIM"));
   Serial.println(F("QUERY: STATUS | LEVEL | HELP"));
   Serial.println(F("MAINTENANCE: CODECINIT | RESET"));
+  Serial.println(F("DIAGNOSTIC: DEBUG ON | DEBUG OFF"));
   Serial.println(F("STATUS: live DSP settings, levels, applied generation, and build identity"));
   Serial.println(F("REPLY: OK or ? followed by ACK <DSP-state> GEN=<n> OK|ERROR"));
   Serial.println(F("END HELP"));
@@ -2631,7 +2635,7 @@ void loop()
   // Adjust  S:N only every 2-5 ms 
   if (int(ulngCurrentElapsedTimeUs - ulngLastSNUpdateUs) > random(2000, 5000)); // Only adjust S:N every 2-5ms
     {
-      if (blnSim) { AdjustS_N ( intTargetSN, fltppLPInputMeasAvg);}
+      if (blnSim) { AdjustS_N ( intTargetSN, fltppLPInputMeasAvg, true);}// operator-set target S:N (boot/dial/serial): prints one calibration block on change
       ulngLastSNUpdateUs = ulngCurrentElapsedTimeUs;
       // Code for Fading a Channel (modes 0-4) WGN,MPG,MPM,MPP,MPD
       if ((intFadeDepth_dB > 0) && (fltFadeRate > .01) && blnSim)
@@ -2640,7 +2644,7 @@ void loop()
         }
       else if (blnSim) 
         {
-          AdjustS_N ( intTargetSN, fltppLPInputMeasAvg);
+          AdjustS_N ( intTargetSN, fltppLPInputMeasAvg, true);// operator-set target S:N (non-fade steady): prints one calibration block on change
         }
     }// End of Code to handle S:N adjustment
 
@@ -2775,6 +2779,8 @@ void loop()
           else if (strCmd == "STATUS") {PrintStatus();}
           else if (strCmd == "LEVEL") {PrintLevel();}
           else if (strCmd == "HELP") {PrintHelp();}
+          else if (strCmd == "DEBUG ON") {blnDebugAdjustSN = true; Serial.println("OK DEBUG ON");}
+          else if (strCmd == "DEBUG OFF") {blnDebugAdjustSN = false; Serial.println("OK DEBUG OFF");}
           else if (blnSim)
             {
               if (strCmd == "BUSY")
@@ -2820,7 +2826,8 @@ void loop()
               else {Serial.println("?");}
             }
           if ((strCmd != "STATUS") && (strCmd != "LEVEL") && (strCmd != "HELP") &&
-              (strCmd != "RESET") && (strCmd != "CODECINIT"))
+              (strCmd != "RESET") && (strCmd != "CODECINIT") &&
+              (strCmd != "DEBUG ON") && (strCmd != "DEBUG OFF"))
             {
               if (blnCommandStartedInSim)
                 {

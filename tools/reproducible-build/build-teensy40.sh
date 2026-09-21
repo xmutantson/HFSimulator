@@ -81,7 +81,7 @@ write_manifest() {
     printf 'bounce2_tree=%s\n' "$(git -C "${REPOSITORY_ROOT}" rev-parse HEAD:src/libraries/Bounce2)"
     printf 'ili9341_t3_tree=%s\n' "$(git -C "${REPOSITORY_ROOT}" rev-parse HEAD:src/libraries/ILI9341_t3)"
     printf 'encoder_tree=%s\n' "$(git -C "${REPOSITORY_ROOT}" rev-parse HEAD:src/libraries/Encoder)"
-    printf 'encoder2_h_sha256=%s\n' "$(git -C "${REPOSITORY_ROOT}" show HEAD:src/HFSim_BFD_2_04/Encoder2.h | sha256sum | awk '{print $1}')"
+    printf 'encoder2_h_sha256=%s\n' "$(git -C "${REPOSITORY_ROOT}" show HEAD:src/HFSim_BFD_2_05/Encoder2.h | sha256sum | awk '{print $1}')"
   } > "${destination}"
 }
 
@@ -90,12 +90,12 @@ compile_once() {
   rm -rf -- "${WORK_DIRECTORY}" "${BUILD_DIRECTORY}" "${EXPORT_DIRECTORY}"
   mkdir -p "${WORK_DIRECTORY}" "${BUILD_DIRECTORY}" "${EXPORT_DIRECTORY}"
   git -C "${REPOSITORY_ROOT}" archive --format=tar HEAD | tar -xf - -C "${WORK_DIRECTORY}"
-  cp -a "${WORK_DIRECTORY}/src/libraries/Encoder/utility" "${WORK_DIRECTORY}/src/HFSim_BFD_2_04/utility"
-  write_identity_header "${WORK_DIRECTORY}/src/HFSim_BFD_2_04"
+  cp -a "${WORK_DIRECTORY}/src/libraries/Encoder/utility" "${WORK_DIRECTORY}/src/HFSim_BFD_2_05/utility"
+  write_identity_header "${WORK_DIRECTORY}/src/HFSim_BFD_2_05"
 
   local run_output="${OUTPUT_ABSOLUTE}/${run_name}"
   mkdir -p "${run_output}/build" "${run_output}/artifacts"
-  cp "${WORK_DIRECTORY}/src/HFSim_BFD_2_04/BuildIdentity.h" "${run_output}/BuildIdentity.h"
+  cp "${WORK_DIRECTORY}/src/HFSim_BFD_2_05/BuildIdentity.h" "${run_output}/BuildIdentity.h"
   write_manifest "${run_output}/build-manifest.txt"
 
   "${CLI_PATH}" compile \
@@ -107,7 +107,7 @@ compile_once() {
     --library "${WORK_DIRECTORY}/src/libraries/ILI9341_t3" \
     --warnings all \
     --verbose \
-    "${WORK_DIRECTORY}/src/HFSim_BFD_2_04" \
+    "${WORK_DIRECTORY}/src/HFSim_BFD_2_05" \
     2>&1 | tee "${run_output}/compile.log"
 
   cp -a "${BUILD_DIRECTORY}/." "${run_output}/build/"

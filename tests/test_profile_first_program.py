@@ -5,13 +5,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FIRMWARES = (
-    ROOT / "src" / "HFSim_BFD_2_04" / "HFSim_BFD_2_04.ino",
+    ROOT / "src" / "HFSim_BFD_2_05" / "HFSim_BFD_2_05.ino",
     ROOT
     / "hardware"
     / "Alternate hardware platforms"
     / "src"
-    / "HFSim_BFD_2_04_Proto"
-    / "HFSim_BFD_2_04_Proto.ino",
+    / "HFSim_BFD_2_05_Proto"
+    / "HFSim_BFD_2_05_Proto.ino",
 )
 
 PROGRAM = (
