@@ -40,6 +40,10 @@ class USBStateInterfaceFeatureTest(unittest.TestCase):
                 reset = section(source, 'if (strCmd == "RESET")', 'else if (strCmd == "CODECINIT")')
                 self.assertLess(reset.index("Serial.flush();"), reset.index("SCB_AIRCR"))
 
+                busy = section(source, 'if (strCmd == "BUSY")', "intSerialCmdMode = ParseSimMode")
+                self.assertLess(busy.index("InitializeBusy();"), busy.index('Serial.println("OK")'))
+                self.assertIn("ulngAppliedGeneration++", busy)
+
                 ack = section(source, "void PrintDSPStateAck(", "void PrintStatus()")
                 self.assertIn("SimulatorStateParameterText(intMode)", ack)
                 self.assertIn("BusyStateParameterText(intBusyMode)", ack)

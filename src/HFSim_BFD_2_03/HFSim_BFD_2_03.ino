@@ -2678,28 +2678,31 @@ void loop()
           else if (strCmd == "HELP") {PrintHelp();}
           else if (blnSim)
             {
-              intSerialCmdMode = ParseSimMode(strMode);
-              if (intSerialCmdMode == 18)//  Moved to 18 to accomodate TEST3K, TEST6K
+              if (strCmd == "BUSY")
                 {
-                  Serial.println("OK");//Serial Command is OK
                   blnSim = false;  blnInitialized = false;  blnEnableTestTone = false;
                   InitializeBusy();
+                  ulngAppliedGeneration++;
+                  Serial.println("OK");
                 }
-              else if (intSerialCmdMode > -1)
+              else
                 {
-                  //Serial.print("Line 2240: intSerialCmdMode = ");Serial.println(intSerialCmdMode);
-                  if (SimulationParameterSyntaxValid(strParameter, intSerialCmdMode) && ParseSetSimParameter(strParameter, intSerialCmdMode))
+                  intSerialCmdMode = ParseSimMode(strMode);
+                  if (intSerialCmdMode > -1)
                     {
-                      if (intSerialCmdMode < 5)
+                      if (SimulationParameterSyntaxValid(strParameter, intSerialCmdMode) && ParseSetSimParameter(strParameter, intSerialCmdMode))
                         {
-                          if (ApplyChannelMode(intSerialCmdMode)) {Serial.println("OK");}
-                          else {Serial.println("?"); intSerialCmdMode = -1;}
+                          if (intSerialCmdMode < 5)
+                            {
+                              if (ApplyChannelMode(intSerialCmdMode)) {Serial.println("OK");}
+                              else {Serial.println("?"); intSerialCmdMode = -1;}
+                            }
+                          else {ulngAppliedGeneration++; Serial.println("OK");}
                         }
-                      else {ulngAppliedGeneration++; Serial.println("OK");}
+                      else {Serial.println("?"); intSerialCmdMode = -1;}//Serial Command fail
                     }
-                  else {Serial.println("?"); intSerialCmdMode = -1;}//Serial Command fail
+                  else {Serial.println("?");}
                 }
-              else {Serial.println("?");}
             }
           else   
             {
