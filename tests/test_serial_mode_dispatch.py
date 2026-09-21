@@ -28,13 +28,17 @@ class SerialModeDispatchTest(unittest.TestCase):
                 block = successful_serial_simulation_dispatch(
                     firmware.read_text(encoding="utf-8")
                 )
-                self.assertRegex(block, r"\bintMode\s*=\s*intSerialCmdMode\s*;")
-                self.assertRegex(block, r"\bblnInitialized\s*=\s*false\s*;")
-                self.assertNotRegex(
+                guard = re.search(
+                    r"if\s*\(intSerialCmdMode\s*<\s*5\)\s*\{(?P<body>.*?)\}",
                     block,
-                    r"if\s*\(intSerialCmdMode\s*<\s*5\)",
-                    "parameter-page commands must update the selected live state too",
+                    re.DOTALL,
                 )
+                self.assertIsNotNone(
+                    guard,
+                    "only channel-profile selectors may replace the live mode",
+                )
+                self.assertRegex(guard.group("body"), r"\bintMode\s*=\s*intSerialCmdMode\s*;")
+                self.assertRegex(guard.group("body"), r"\bblnInitialized\s*=\s*false\s*;")
 
 
 if __name__ == "__main__":

@@ -2579,8 +2579,11 @@ void loop()
                   if (IsNumericParameter(strParameter) && ParseSetSimParameter(strParameter, intSerialCmdMode))
                     {
                       Serial.println("OK"); //Serial Command is OK
-                      intMode = intSerialCmdMode;
-                      blnInitialized = false;
+                      if (intSerialCmdMode < 5)
+                        {
+                          intMode = intSerialCmdMode;
+                          blnInitialized = false;
+                        }
                     }
                   else {Serial.println("?");}//Serial Command fail
                 }
